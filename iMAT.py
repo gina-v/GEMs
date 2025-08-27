@@ -7,8 +7,11 @@ def iMAT(model, expressionRxns, threshold_lb, threshold_ub, tol=None, core=None,
     """
     Returns a context-specific tissue model using the iMAT algorithm.
     """
-    # the result of the function is a variable called tissueModel. 
-    return tissueModel # ** what is tissueModel? It's not an object and not assigned to a class...
+    # the result of the function is a variable called tissueModel.
+
+    # CTB: tissueModel is not defined, and you don't want to return immediately
+    # anyway. Note to self @CTB: look at the matlab code to grok why this is here.
+    #CTB return tissueModel # ** what is tissueModel? It's not an object and not assigned to a class...
 
 # check if the model has a field called C or E. If so, return a warning using hasattr (check if it has attribute)
 # ** what is C and E? ** 
@@ -52,7 +55,10 @@ def iMAT(model, expressionRxns, threshold_lb, threshold_ub, tol=None, core=None,
                     print(f"Warning: core reaction {rxn} not found in the model reactions.")
 
     # Purpose: Store S matrix in easy to use variable, extract reaction upper bounds and lower bounds. 
-    S = model.S # model is an object of the cobra.Model class. model.s is an attribute of the model object that stores the SciPy sparse stoichiometric matrix. 
+    #S = model.S # model is an object of the cobra.Model class. model.s is an attribute of the model object that stores the SciPy sparse stoichiometric matrix.
+    # CTB: I _think_, looking at https://cobrapy.readthedocs.io/en/latest/getting_started.html#Reactions, that Python's model.reactions is the equivalent of model.S.
+    S = model.reactions
+
     # concept: list comprehension
     # rxn.lower_bound is an attribute of the cobra.Reaction class that stores the lower bound of a reaction and vice versa. 
     lb = [rxn.lower_bound for rxn in model.reactions] # list of lower bounds for each reaction made by looping through the rxns in model.reactions list
@@ -61,25 +67,19 @@ def iMAT(model, expressionRxns, threshold_lb, threshold_ub, tol=None, core=None,
         # lb = np.array([rxn.lower_bound for rxn in model.reactions])
         # ub = np.array([rxn.upper_bound for rxn in model.reactions])
 
-    # Purpose: Get size of the S matrix
-    # Concept: Tuple unpacking - a shortcut to unpack a tuple to multiple variables at once 
-    # S.shape = (number of rows, number of columns)
-    # rows = metabolites, columns = reactions
-    # Concept: Use a "List of Lists", LIL, format to make a sparse matrix because it is efficient for row-by-row assignment
-    # ** Look into the difference between a sparse and dense matrix. Why are most of the values zero? What are the values? 
-    A = lil_matrix((n_rows, n_cols)) # ** why do you have to specify the names of the rows and columns? Why can't it just be A = lil_matrix()??
-    n_RH = len(RHindex)
-    n_RL = len(RLindex)
-    # Copy S into the top-left corner of A
-    # Concept: Sparce matrix slicing
-    A[:n_mets, :n_rxns] = S 
-    # take the first n_mets rows and first n_rxns columns of A and fill this block with the values from S. 
-
+    # CTB note: n_rows and n_cols need to exist BEFORE they are used to
+    # create the lil_matrix A.
     # Purpose: Calculate the number of rows and columns in the constraint matrix A.
             # A contains all equations and inequalties that:
                 # Enforce mass balance in S matrix
                 # Enforce high expression reactions to carry flux 
                 # Enforce low expression reactions to carry no flux
+
+    # CTB: need to define n_mets. Presumably number of metabolites?
+    # CTB: need to define n_rxns. Presumably number of reactions?
+    n_mets = len(model.metabolites)
+    n_rxns = len(model.reactions)
+
     n_rows = n_mets + 2 * len(RHindex) + 2 * len(RLindex)
     # n_mets: the row for mass balance equations in the S matrix (number of metabolites)
     # 2 rows of constraints per each highly expressed reaction (enforce activation)
@@ -88,6 +88,25 @@ def iMAT(model, expressionRxns, threshold_lb, threshold_ub, tol=None, core=None,
     # n_rxns: one column for each reaction flux 
     # 2 columns of binary variables (like 0 and 1) to enforce activation of highly expressed reactions
     # 1 column of binary variables to enforce suppression of lowly expressed reactions
+
+    # Purpose: Get size of the S matrix
+    # Concept: Tuple unpacking - a shortcut to unpack a tuple to multiple variables at once 
+    # S.shape = (number of rows, number of columns)
+    # rows = metabolites, columns = reactions
+    # Concept: Use a "List of Lists", LIL, format to make a sparse matrix because it is efficient for row-by-row assignment
+    # ** Look into the difference between a sparse and dense matrix. Why are most of the values zero? What are the values?
+    # CTB: a sparse matrix is one where most of the elements are 0, and such
+    # matrices can be stored more efficiently than a dense matrix.
+    # CTB: the values are (probably) interactions between
+    # CTB: n_rows and n_cols are the number of rows and columns here.
+    A = lil_matrix((n_rows, n_cols)) # ** why do you have to specify the names of the rows and columns? Why can't it just be A = lil_matrix()??
+    n_RH = len(RHindex)
+    n_RL = len(RLindex)
+    # Copy S into the top-left corner of A
+    # Concept: Sparce matrix slicing
+    # CTB: here we need to figure out 'S' better :)
+    A[:n_mets, :n_rxns] = S 
+    # take the first n_mets rows and first n_rxns columns of A and fill this block with the values from S. 
 
 # More info on A: 
     # The matrix A is used in the constraint: A * x = b
